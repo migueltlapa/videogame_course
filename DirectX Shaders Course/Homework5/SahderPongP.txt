@@ -1,0 +1,147 @@
+#define SPECULAR_POWER 120
+
+cbuffer Ojo: register(b0)
+{
+	float4 EyePos:POSITION0;
+	//---16BYTES
+	float4 LDir: POSITION1;
+	//---16BYTES
+
+}
+
+struct LightingResult
+{
+	float4 Diffuse;
+	float4 Specular;
+
+};
+
+struct Light
+{
+	float4 Position;
+	float4 Direction;
+	float4 Color;
+
+};
+
+
+
+struct PIn
+{
+	
+	float4 color                : COLOR;
+	float4 position             : SV_POSITION;
+	float4 positionWS           : POSITION;
+	float3 normalWS             : NORMAL;
+	
+
+};
+
+//L and N must be normalized
+// Con esta funcion calculo la distancia entre 2 vectores (L y N)
+//Despues Multiplico el resultado con COlor
+float4 DoDiffuse(Light light, float3 L, float3 N)
+{
+	float NdotL = max(0, dot(N, L)); //clamp(dot(N,L),0,1);
+
+	return light.Color*NdotL;
+
+}
+// Light = Posicion, Direction, Color
+// V es el vector de la camara
+// L es el vector del Punto P a la Luz
+// N es la Normal del Punto P
+
+float4 DoSpecular(Light light, float3 V, float3 L, float3 N)
+{
+	//Phong lighting
+	float3 R    = normalize(reflect(-L, N));
+	//float3 R = 2 * (dot(L, N)*N - L;
+	
+	//float3 R = -(L - 2 * dot(L, N)*N);
+	// RdotV = Calculo la distancia entre el Vector de Reflexion y el de la Camara
+	float RdotV = max(0, dot(R, V));
+	// Blinn-Phong lighting
+
+	float3 H = normalize(L + V);
+	float NdotH = max(0, dot(N, H));
+
+	
+	//NdotH
+	return light.Color*pow(RdotV, SPECULAR_POWER);
+
+	
+}
+
+LightingResult DoDirectionalLight(Light light, float3 V, float3 N)
+{
+	LightingResult result;
+	float3 L = -light.Direction.xyz;
+	result.Diffuse = DoDiffuse(light, L, N);
+	result.Specular = DoSpecular(light, V, L, N);
+	return result;
+
+
+}
+
+//Light DoPointLight(float4 EyePosition)
+//{
+//	Light gLight;
+	//gLight.Position = float4(0, 100.0f, 0, 1.0f);
+//	gLight.Position = EyePosition;
+//	gLight.Direction = LDir; //	 float4(0, -1.0f, 0, 1.0f);
+//	gLight.Color = float4(0, 1, 0, 1);
+//	return gLight;
+//}
+
+float DoAttenuation(Light light, float4 P)
+{
+
+	float3 L			= (light.Position - P).xyz;
+	float distance		= length(L);
+	float ajuste;
+	if (distance >= 5)
+	{
+
+		ajuste = 0.2;
+	}
+
+	
+	return ajuste;
+}
+
+float4 PShader(PIn IN) : SV_TARGET
+{
+	//float4 EyePosition = float4(0, 0, -1, 1);
+	float4 EyePosition = EyePos;
+
+	float4 P = IN.positionWS;
+	//float3 N = normalize(IN.normalWS);
+	float3 N = IN.normalWS;
+	float3 V = normalize(EyePosition - P).xyz;
+	//lUz emmisiive es la luz del objeto
+	float4 emissive = float4(0.0f, 0.0f, 0.0f, 1.0f);
+	float4 ambient = float4(0.07568f, 0.21424f, 0.07568f, 1.0f);
+	//float4 ambient = float4(1.0f, 0.0f, 0.0f, 1.0f);
+
+	
+	Light gLight;
+	gLight.Position = EyePos;
+	gLight.Direction = LDir; //	 float4(0, -1.0f, 0, 1.0f);
+	gLight.Color = float4(0, 1, 0, 1);
+	
+	//Light attribute_light;
+	
+	//attribute_light = DoPointLight(EyePosition);
+	//float4 ajuste = DoAttenuation(gLight, P);
+	float ajuste = DoAttenuation(gLight,P);
+
+
+	LightingResult lr = DoDirectionalLight(gLight, V, N);
+	lr.Diffuse = lr.Diffuse*ajuste;
+	//LightingResult lr = DoDirectionalLight(attribute_light, V, N);
+	float4 finalColor = emissive + ambient + lr.Diffuse + lr.Specular;
+
+
+	return finalColor;
+}
